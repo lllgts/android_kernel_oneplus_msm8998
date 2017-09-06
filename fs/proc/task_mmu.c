@@ -737,6 +737,30 @@ static int show_smap(struct seq_file *m, void *v, int is_pid)
 
 	smaps_walk.private = mss;
 
+#ifdef CONFIG_SHMEM
+	if (vma->vm_file && shmem_mapping(vma->vm_file->f_mapping)) {
+		/*
+		 * For shared or readonly shmem mappings we know that all
+		 * swapped out pages belong to the shmem object, and we can
+		 * obtain the swap value much more efficiently. For private
+		 * writable mappings, we might have COW pages that are
+		 * not affected by the parent swapped out pages of the shmem
+		 * object, so we have to distinguish them during the page walk.
+		 * Unless we know that the shmem object (or the part mapped by
+		 * our VMA) has no swapped out pages at all.
+		 */
+		unsigned long shmem_swapped = shmem_swap_usage(vma);
+
+		if (!shmem_swapped || (vma->vm_flags & VM_SHARED) ||
+					!(vma->vm_flags & VM_WRITE)) {
+			mss->swap = shmem_swapped;
+		} else {
+			mss->check_shmem_swap = true;
+			smaps_walk.pte_hole = smaps_pte_hole;
+		}
+	}
+#endif
+
 	/* mmap_sem is held in m_start */
 	walk_page_vma(vma, &smaps_walk);
 	if (vma->vm_flags & VM_LOCKED)
@@ -818,12 +842,6 @@ static int show_smap(struct seq_file *m, void *v, int is_pid)
 		ret = SEQ_SKIP;
 	}
 
-	if (!rollup_mode && vma_get_anon_name(vma)) {
-		seq_puts(m, "Name:           ");
-		seq_print_vma_name(m, vma);
-		seq_putc(m, '\n');
-	}
-
 	if (!rollup_mode)
 		seq_printf(m,
 			   "Size:           %8lu kB\n"
@@ -844,7 +862,9 @@ static int show_smap(struct seq_file *m, void *v, int is_pid)
 			   "Private_Dirty:  %8lu kB\n"
 			   "Referenced:     %8lu kB\n"
 			   "Anonymous:      %8lu kB\n"
+			   "LazyFree:       %8lu kB\n"
 			   "AnonHugePages:  %8lu kB\n"
+			   "ShmemPmdMapped: %8lu kB\n"
 			   "Shared_Hugetlb: %8lu kB\n"
 			   "Private_Hugetlb: %7lu kB\n"
 			   "Swap:           %8lu kB\n"
@@ -858,7 +878,9 @@ static int show_smap(struct seq_file *m, void *v, int is_pid)
 			   mss->private_dirty >> 10,
 			   mss->referenced >> 10,
 			   mss->anonymous >> 10,
+			   mss->lazyfree >> 10,
 			   mss->anonymous_thp >> 10,
+			   mss->shmem_thp >> 10,
 			   mss->shared_hugetlb >> 10,
 			   mss->private_hugetlb >> 10,
 			   mss->swap >> 10,
@@ -866,6 +888,7 @@ static int show_smap(struct seq_file *m, void *v, int is_pid)
 			   (unsigned long)(mss->pss >> (10 + PSS_SHIFT)));
 
 	if (!rollup_mode) {
+		arch_show_smap(m, vma);
 		show_smap_vma_flags(m, vma);
 	}
 	m_cache_vma(m, vma);
