@@ -103,6 +103,7 @@ if BLOCK
 menu "DOS/FAT/NT Filesystems"
 
 source "fs/fat/Kconfig"
+source "fs/sdfat/Kconfig"
 source "fs/ntfs/Kconfig"
 
 # liochen@filesystem, 2016/12/03, Support NTFS and EXFAT in kernel
