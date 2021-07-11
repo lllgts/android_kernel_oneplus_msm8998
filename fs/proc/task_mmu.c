@@ -612,6 +612,7 @@ struct mem_size_stats {
 	unsigned long anonymous;
 	unsigned long lazyfree;
 	unsigned long anonymous_thp;
+	unsigned long shmem_thp;
 	unsigned long swap;
 	unsigned long shared_hugetlb;
 	unsigned long private_hugetlb;
